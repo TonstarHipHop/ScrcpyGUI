@@ -12,6 +12,10 @@ from typing import Callable
 LogCallback = Callable[[str], None]
 
 
+class AirplaneToggleUnsupportedError(RuntimeError):
+    pass
+
+
 @dataclass
 class CommandResult:
     command: list[str]
@@ -96,11 +100,8 @@ class AdbService:
         raise RuntimeError("Could not find a Wi-Fi IP address for this device.")
 
     def get_wifi_mac(self, serial: str) -> str:
-        address_file = self.run_adb(
-            ["-s", serial, "shell", "cat", "/sys/class/net/wlan0/address"],
-            timeout=10,
-        )
-        mac_address = parse_mac_address(address_file.stdout)
+        addr = self.run_adb(["-s", serial, "shell", "ip", "addr", "show", "wlan0"], timeout=10)
+        mac_address = parse_mac_address(addr.stdout)
         if mac_address:
             return mac_address
 
@@ -109,17 +110,89 @@ class AdbService:
         if mac_address:
             return mac_address
 
-        addr = self.run_adb(["-s", serial, "shell", "ip", "addr", "show", "wlan0"], timeout=10)
-        return parse_mac_address(addr.stdout)
+        address_file = self.run_adb(
+            ["-s", serial, "shell", "cat", "/sys/class/net/wlan0/address"],
+            timeout=10,
+        )
+        return parse_mac_address(address_file.stdout)
 
     def connect(self, host: str, port: int = 5555) -> CommandResult:
         return self.run_adb(["connect", f"{host}:{port}"], timeout=30)
+
+    def ensure_connected(self, host: str, port: int = 5555) -> str:
+        endpoint = f"{host}:{port}"
+        result = self.connect(host, port)
+        if not connection_result_success(result, endpoint):
+            raise RuntimeError(result.stderr or result.stdout or "adb connect failed")
+
+        state = self.get_state(endpoint)
+        if not state.ok or state.stdout.strip() != "device":
+            raise RuntimeError(state.stderr or state.stdout or "wireless device not ready")
+
+        return endpoint
 
     def disconnect(self, endpoint: str) -> CommandResult:
         return self.run_adb(["disconnect", endpoint], timeout=15)
 
     def get_state(self, serial: str) -> CommandResult:
         return self.run_adb(["-s", serial, "get-state"], timeout=15)
+
+    def set_airplane_mode(self, serial: str, enabled: bool) -> None:
+        mode_value = "1" if enabled else "0"
+        cmd_mode = "enable" if enabled else "disable"
+        broadcast_state = "true" if enabled else "false"
+        errors: list[str] = []
+
+        cmd_result = self.run_adb(
+            ["-s", serial, "shell", "cmd", "connectivity", "airplane-mode", cmd_mode],
+            timeout=20,
+        )
+        if cmd_result.ok:
+            return
+        errors.append(command_error_text(cmd_result))
+
+        settings_result = self.run_adb(
+            [
+                "-s",
+                serial,
+                "shell",
+                "settings",
+                "put",
+                "global",
+                "airplane_mode_on",
+                mode_value,
+            ],
+            timeout=20,
+        )
+        if not settings_result.ok:
+            errors.append(command_error_text(settings_result))
+
+        broadcast_result = self.run_adb(
+            [
+                "-s",
+                serial,
+                "shell",
+                "am",
+                "broadcast",
+                "-a",
+                "android.intent.action.AIRPLANE_MODE",
+                "--ez",
+                "state",
+                broadcast_state,
+            ],
+            timeout=20,
+        )
+        if settings_result.ok and broadcast_result.ok:
+            return
+        if not broadcast_result.ok:
+            errors.append(command_error_text(broadcast_result))
+
+        lowered = " ".join(errors).lower()
+        if "permission denial" in lowered or "securityexception" in lowered:
+            raise AirplaneToggleUnsupportedError(
+                "Airplane mode toggle is blocked by Android security policy for ADB shell."
+            )
+        raise RuntimeError("Airplane mode toggle failed: " + " | ".join(errors))
 
     def prepare_wireless(self, serial: str, port: int = 5555) -> str:
         ip_address = ""
@@ -146,7 +219,7 @@ class AdbService:
 
         return ip_address
 
-    def launch_scrcpy(self, serial: str) -> int:
+    def launch_scrcpy(self, serial: str) -> subprocess.Popen[bytes]:
         command = [self.scrcpy_path, "-s", serial]
         self.log_command(command)
         try:
@@ -159,7 +232,7 @@ class AdbService:
         except FileNotFoundError as exc:
             raise RuntimeError("scrcpy was not found on PATH.") from exc
         self.log(f"scrcpy launched for {serial} (pid {process.pid})")
-        return process.pid
+        return process
 
     def run_adb(self, args: list[str], timeout: int = 30) -> CommandResult:
         return self.run_command([self.adb_path, *args], timeout=timeout)
@@ -214,6 +287,10 @@ def executable_exists(path: str) -> bool:
         return shutil.which(path) is not None or Path(path).is_file()
     except (OSError, TypeError, ValueError):
         return False
+
+
+def command_error_text(result: CommandResult) -> str:
+    return (result.stderr or result.stdout or f"exit code {result.returncode}").strip()
 
 
 def parse_adb_devices(output: str) -> list[AdbDevice]:

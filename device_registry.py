@@ -27,6 +27,7 @@ class DeviceRecord:
     wireless_port: int = DEFAULT_PORT
     last_seen_usb: str = ""
     last_seen_wireless: str = ""
+    last_wireless_use: str = ""
     router_reminder_acknowledged: bool = False
 
     @property
@@ -154,6 +155,14 @@ class DeviceRegistry:
         target.wireless_port = port
         return target
 
+    def mark_wireless_used(self, device_id: str, used_at: str | None = None) -> None:
+        record = self.devices.get(device_id)
+        if not record:
+            return
+        timestamp = used_at or utc_now_iso()
+        record.last_seen_wireless = timestamp
+        record.last_wireless_use = timestamp
+
     def rename(self, device_id: str, friendly_name: str) -> None:
         record = self.devices[device_id]
         record.friendly_name = friendly_name.strip() or record.friendly_name
@@ -184,6 +193,7 @@ class DeviceRegistry:
             wireless_port=int(item.get("wireless_port", DEFAULT_PORT) or DEFAULT_PORT),
             last_seen_usb=str(item.get("last_seen_usb", "")),
             last_seen_wireless=str(item.get("last_seen_wireless", "")),
+            last_wireless_use=str(item.get("last_wireless_use", "")),
             router_reminder_acknowledged=bool(
                 item.get("router_reminder_acknowledged", False)
             ),
@@ -220,6 +230,8 @@ class DeviceRegistry:
             target.last_seen_usb = source.last_seen_usb
         if not target.last_seen_wireless and source.last_seen_wireless:
             target.last_seen_wireless = source.last_seen_wireless
+        if not target.last_wireless_use and source.last_wireless_use:
+            target.last_wireless_use = source.last_wireless_use
         target.router_reminder_acknowledged = (
             target.router_reminder_acknowledged
             or source.router_reminder_acknowledged
