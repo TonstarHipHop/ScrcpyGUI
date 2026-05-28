@@ -39,6 +39,9 @@ The app stores your device registry in `devices.json` next to `main.py`.
 Wireless ADB usually survives Wi-Fi drops, but it does not survive a phone
 reboot. If a phone reboots, plug it in over USB and run `Prepare Wireless` again.
 
+scrcpy launches use `--no-audio` by default, which is friendlier for headless
+PCs or remote desktop sessions with no available audio output device.
+
 ## Notes
 
 - The app uses a lazy hybrid connection policy. It stores IP/port details and

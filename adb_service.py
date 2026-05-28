@@ -220,7 +220,7 @@ class AdbService:
         return ip_address
 
     def launch_scrcpy(self, serial: str) -> subprocess.Popen[bytes]:
-        command = [self.scrcpy_path, "-s", serial]
+        command = [self.scrcpy_path, "--no-audio", "-s", serial]
         self.log_command(command)
         try:
             process = subprocess.Popen(
