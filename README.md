@@ -17,6 +17,9 @@ This app uses only Python's standard library.
 python main.py
 ```
 
+Or double-click `launch_scrcpy_gui.bat`. The launcher checks for `adb` and
+`scrcpy` on PATH and uses `winget` to install missing tools when possible.
+
 The app stores your device registry in `devices.json` next to `main.py`.
 
 ## Workflow
