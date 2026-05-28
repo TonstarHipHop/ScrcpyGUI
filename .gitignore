@@ -1,0 +1,4 @@
+__pycache__/
+*.py[cod]
+devices.json
+devices.json.tmp
