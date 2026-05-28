@@ -40,7 +40,8 @@ Wireless ADB usually survives Wi-Fi drops, but it does not survive a phone
 reboot. If a phone reboots, plug it in over USB and run `Prepare Wireless` again.
 
 scrcpy launches use `--no-audio` by default, which is friendlier for headless
-PCs or remote desktop sessions with no available audio output device.
+PCs or remote desktop sessions with no available audio output device. The
+scrcpy window title is set to the device's friendly name from the app.
 
 ## Notes
 

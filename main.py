@@ -634,7 +634,7 @@ class ScrcpyGui(tk.Tk):
         serial = status.usb_serial
         self.run_task(
             f"Launching USB scrcpy for {record.friendly_name}",
-            lambda: self.adb.launch_scrcpy(serial),
+            lambda: self.adb.launch_scrcpy(serial, record.friendly_name),
             on_success=lambda process: self.enqueue_log(
                 f"USB scrcpy started for {serial} (pid {process.pid})"
             ),
@@ -652,7 +652,7 @@ class ScrcpyGui(tk.Tk):
 
         def task() -> Any:
             self.adb.ensure_connected(host, port)
-            return self.adb.launch_scrcpy(endpoint)
+            return self.adb.launch_scrcpy(endpoint, record.friendly_name)
 
         def success(process: Any) -> None:
             self.scrcpy_processes_by_endpoint[endpoint] = process
